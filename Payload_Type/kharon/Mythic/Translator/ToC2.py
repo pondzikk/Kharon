@@ -281,15 +281,19 @@ def PostC2(Data):
 
     try:
         Psr = Parser(Data, len(Data))
+        Dbg2(f"Created parser with {len(Data)} bytes")
         Tasks = Psr.Int32()
         Dbg2(f"Task quantity: {Tasks}")
 
         Index = 0
         for Task in range(Tasks):
             Index += 1
+            Dbg2(f"Processing task {Index}/{Tasks}")
             try:
                 Profile = Psr.Int32()
+                Dbg2(f"Profile: {Profile}")
                 TaskLength = Psr.Int32()
+                Dbg2(f"Task length: {TaskLength}")
                 if TaskLength <= 0:
                     Dbg2(f"Invalid task length: {TaskLength}")
                     continue
@@ -302,17 +306,22 @@ def PostC2(Data):
                     continue
                     
                 TaskPsr = Parser(TaskData, TaskLength)
+                Dbg2(f"Created task parser with {TaskLength} bytes")
                 
                 try:
                     TaskUUID = TaskPsr.Bytes().replace(b'\x00', b'')
                     TaskUUID = TaskUUID.decode('utf-8') if TaskUUID else "unknown"
+                    Dbg2(f"Parsed TaskUUID: {TaskUUID}")
                 except UnicodeDecodeError:
                     TaskUUID = TaskUUID.hex() if TaskUUID else "unknown"
+                    Dbg2(f"TaskUUID decode failed, using hex: {TaskUUID}")
+                except Exception as e:
+                    TaskUUID = "unknown"
+                    Dbg2(f"TaskUUID parsing failed: {str(e)}")
                 
                 try:
                     CommandID = TaskPsr.Pad(2)
                     CommandID = int.from_bytes(CommandID, byteorder="big") if len(CommandID) == 2 else 0
-
                     Dbg2(f"Process command id: {CommandID}")
                 except Exception as e:
                     CommandID = 0
