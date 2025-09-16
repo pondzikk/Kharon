@@ -402,7 +402,7 @@ def process_normal_task(TaskUUID, CommandID, TaskPsr:Parser):
             file_id = TaskPsr.Str()
             file_path = TaskPsr.Str()
             chunk_size = TaskPsr.Int32()
-            file_data = TaskPsr.All()  # Get remaining bytes as file content
+            file_data = TaskPsr.Bytes()  # Use Bytes() instead of All() to handle length prefix
             
             return {
                 "task_id": TaskUUID, 

