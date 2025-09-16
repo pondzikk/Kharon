@@ -280,8 +280,12 @@ def PostC2(Data):
     Dbg3(f"buffer: {Data} [{len(Data)}]")
 
     try:
+        Dbg2(f"About to create Parser with data length: {len(Data)}")
+        Dbg2(f"First 50 bytes of data: {Data[:50]}")
         Psr = Parser(Data, len(Data))
         Dbg2(f"Created parser with {len(Data)} bytes")
+        
+        Dbg2("About to read task quantity (Int32)")
         Tasks = Psr.Int32()
         Dbg2(f"Task quantity: {Tasks}")
 
@@ -369,6 +373,9 @@ def PostC2(Data):
 
     except Exception as e:
         Dbg2(f"Fatal error in PostC2: {str(e)}")
+        Dbg2(f"Exception type: {type(e).__name__}")
+        import traceback
+        Dbg2(f"Traceback: {traceback.format_exc()}")
         return {"action": "post_response", "responses": [], "error": str(e)}
 
     JsonData = {
