@@ -274,19 +274,25 @@ def QuickMsg( Data ):
 def PostC2(Data):
     Dbg2("------------------------")
     Dbg2(f"PostC2 called with {len(Data)} bytes of data")
+    Dbg2("=== CRITICAL DEBUG: Enhanced PostC2 function is being used ===")
     RespTsk = [] 
     RespSck = []
 
     Dbg3(f"buffer: {Data} [{len(Data)}]")
 
     try:
+        import logging
+        logging.info("POST => DIRECT LOGGING: About to create Parser")
         Dbg2(f"About to create Parser with data length: {len(Data)}")
         Dbg2(f"First 50 bytes of data: {Data[:50]}")
         Psr = Parser(Data, len(Data))
+        logging.info("POST => DIRECT LOGGING: Parser created successfully")
         Dbg2(f"Created parser with {len(Data)} bytes")
         
+        logging.info("POST => DIRECT LOGGING: About to read task quantity")
         Dbg2("About to read task quantity (Int32)")
         Tasks = Psr.Int32()
+        logging.info(f"POST => DIRECT LOGGING: Task quantity read: {Tasks}")
         Dbg2(f"Task quantity: {Tasks}")
 
         Index = 0
