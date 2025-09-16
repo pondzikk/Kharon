@@ -66,7 +66,7 @@ class DownloadCommand( CommandBase ):
 
     async def create_go_tasking(self, taskData: PTTaskMessageAllData) -> PTTaskCreateTaskingMessageResponse:
         response = PTTaskCreateTaskingMessageResponse(
-            TaskID=taskData.task.ID,
+            TaskID=taskData.Task.ID,
             Success=True,
         )
         path = taskData.args.get_arg("path")
