@@ -4,3 +4,6 @@ Build
 .vscode
 NOTES.md
 ldr*
+__pycache__/
+*.pyc
+*.pyo
