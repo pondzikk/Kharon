@@ -273,22 +273,37 @@ def QuickMsg( Data ):
 
 def PostC2(Data):
     Dbg2("------------------------")
+    Dbg2(f"PostC2 called with {len(Data)} bytes of data")
+    Dbg2("=== CRITICAL DEBUG: Enhanced PostC2 function is being used ===")
     RespTsk = [] 
     RespSck = []
 
     Dbg3(f"buffer: {Data} [{len(Data)}]")
 
     try:
+        import logging
+        logging.info("POST => DIRECT LOGGING: About to create Parser")
+        Dbg2(f"About to create Parser with data length: {len(Data)}")
+        Dbg2(f"First 50 bytes of data: {Data[:50]}")
         Psr = Parser(Data, len(Data))
+        logging.info("POST => DIRECT LOGGING: Parser created successfully")
+        Dbg2(f"Created parser with {len(Data)} bytes")
+        
+        logging.info("POST => DIRECT LOGGING: About to read task quantity")
+        Dbg2("About to read task quantity (Int32)")
         Tasks = Psr.Int32()
+        logging.info(f"POST => DIRECT LOGGING: Task quantity read: {Tasks}")
         Dbg2(f"Task quantity: {Tasks}")
 
         Index = 0
         for Task in range(Tasks):
             Index += 1
+            Dbg2(f"Processing task {Index}/{Tasks}")
             try:
                 Profile = Psr.Int32()
+                Dbg2(f"Profile: {Profile}")
                 TaskLength = Psr.Int32()
+                Dbg2(f"Task length: {TaskLength}")
                 if TaskLength <= 0:
                     Dbg2(f"Invalid task length: {TaskLength}")
                     continue
@@ -301,17 +316,22 @@ def PostC2(Data):
                     continue
                     
                 TaskPsr = Parser(TaskData, TaskLength)
+                Dbg2(f"Created task parser with {TaskLength} bytes")
                 
                 try:
                     TaskUUID = TaskPsr.Bytes().replace(b'\x00', b'')
                     TaskUUID = TaskUUID.decode('utf-8') if TaskUUID else "unknown"
+                    Dbg2(f"Parsed TaskUUID: {TaskUUID}")
                 except UnicodeDecodeError:
                     TaskUUID = TaskUUID.hex() if TaskUUID else "unknown"
+                    Dbg2(f"TaskUUID decode failed, using hex: {TaskUUID}")
+                except Exception as e:
+                    TaskUUID = "unknown"
+                    Dbg2(f"TaskUUID parsing failed: {str(e)}")
                 
                 try:
                     CommandID = TaskPsr.Pad(2)
                     CommandID = int.from_bytes(CommandID, byteorder="big") if len(CommandID) == 2 else 0
-
                     Dbg2(f"Process command id: {CommandID}")
                 except Exception as e:
                     CommandID = 0
@@ -359,6 +379,9 @@ def PostC2(Data):
 
     except Exception as e:
         Dbg2(f"Fatal error in PostC2: {str(e)}")
+        Dbg2(f"Exception type: {type(e).__name__}")
+        import traceback
+        Dbg2(f"Traceback: {traceback.format_exc()}")
         return {"action": "post_response", "responses": [], "error": str(e)}
 
     JsonData = {
@@ -397,12 +420,15 @@ def process_delegates(TaskUUID, Message, Psr:Parser):
 def process_normal_task(TaskUUID, CommandID, TaskPsr:Parser):
     if   CommandID == T_DOWNLOAD:
         # Parse download response from agent
+        Dbg2(f"Processing download response for task {TaskUUID}")
         try:
             current_chunk = TaskPsr.Int32()
             file_id = TaskPsr.Str()
             file_path = TaskPsr.Str()
             chunk_size = TaskPsr.Int32()
-            file_data = TaskPsr.All()  # Get remaining bytes as file content
+            file_data = TaskPsr.Bytes()  # Use Bytes() instead of All() to handle length prefix
+            
+            Dbg2(f"Download parsed: chunk={current_chunk}, file_id={file_id}, path={file_path}, size={chunk_size}, data_len={len(file_data) if file_data else 0}")
             
             return {
                 "task_id": TaskUUID, 
@@ -412,7 +438,8 @@ def process_normal_task(TaskUUID, CommandID, TaskPsr:Parser):
                     "chunk_num": current_chunk,
                     "full_path": file_path,
                     "data": file_data.hex() if file_data else ""
-                }
+                },
+                "completed": True
             }
         except Exception as e:
             Dbg2(f"Error parsing download response: {str(e)}")

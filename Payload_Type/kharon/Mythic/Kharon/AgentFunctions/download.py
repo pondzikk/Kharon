@@ -93,4 +93,6 @@ class DownloadCommand( CommandBase ):
 
     async def process_response(self, task: PTTaskMessageAllData, response: any) -> PTTaskProcessResponseMessageResponse:
         resp = PTTaskProcessResponseMessageResponse( TaskID = task.Task.ID, Success = True )
+        # The download data is handled by the translator ToC2.py, which returns a "download" object
+        # The Mythic framework automatically processes this and creates the downloaded file
         return resp
