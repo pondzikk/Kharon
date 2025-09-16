@@ -89,6 +89,7 @@ class KharonTranslator( TranslationContainer ):
 
         # Dbg7( f"raw dec: {TextPlain}" )
         Dbg7( f"Action: {Action}" );
+        Dbg7( f"Expected post_response code: {Jobs['post_response']['hex_code']}" );
         Dbg7( f"Encrypt Key: {EncryptKey} [{len(EncryptKey)}]" );
 
         if Action == Jobs['checkin']['hex_code']:
@@ -104,6 +105,7 @@ class KharonTranslator( TranslationContainer ):
             Response.Message = GetTaskingC2( ActionData );
         
         elif Action == Jobs['post_response']['hex_code']:
+            Dbg7(f"Calling PostC2 with {len(ActionData)} bytes")
             Response.Message = PostC2( ActionData );
         
         Dbg7( f"buffer length {len(Response.Message)}" );

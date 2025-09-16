@@ -273,6 +273,7 @@ def QuickMsg( Data ):
 
 def PostC2(Data):
     Dbg2("------------------------")
+    Dbg2(f"PostC2 called with {len(Data)} bytes of data")
     RespTsk = [] 
     RespSck = []
 
